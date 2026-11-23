@@ -24,7 +24,8 @@ RUN pip install --require-hashes --only-binary=:all: -r /tmp/requirements.txt \
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 COPY --chmod=0644 Caddyfile /etc/chainforge-railway/Caddyfile
 COPY --chmod=0755 railway-start.sh /usr/local/bin/railway-start.sh
-RUN caddy version \
+RUN chmod 0755 /etc/chainforge-railway \
+ && caddy version \
  && PORT=8080 CF_INTERNAL_PORT=8001 CF_USERNAME=check CF_PASSWORD_HASH="$(caddy hash-password -p build-check-only)" \
       caddy validate --config /etc/chainforge-railway/Caddyfile --adapter caddyfile \
  && chainforge --help >/dev/null && pip show chainforge | head -2
