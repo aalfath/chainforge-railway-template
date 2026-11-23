@@ -1,0 +1,51 @@
+# Public front for ChainForge on Railway. ChainForge has no login of its own and
+# can run Python code sent to it, so everything except /healthz needs the
+# password, and cross-site browser requests are refused before they reach it.
+{
+	admin off
+	auto_https off
+	persist_config off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$PORT} {
+	encode gzip
+
+	# Railway's health check, without a password. It answers 200 only when
+	# ChainForge itself answers, and never returns ChainForge's page.
+	handle /healthz {
+		rewrite * /
+		reverse_proxy 127.0.0.1:{$CF_INTERNAL_PORT} {
+			header_up Host 127.0.0.1:{$CF_INTERNAL_PORT}
+			header_up -Origin
+			@up status 2xx
+			handle_response @up {
+				respond "ok" 200
+			}
+			handle_response {
+				respond "ChainForge is not answering" 503
+			}
+		}
+	}
+
+	handle {
+		basic_auth {
+			{$CF_USERNAME} {$CF_PASSWORD_HASH}
+		}
+
+		# Same-origin check (what ChainForge does itself on localhost): a browser
+		# request from another site must not reach the server, even with the
+		# password cached in the browser.
+		@crosssite expression `{header.Origin} != "" && {header.Origin} != "https://" + {hostport} && {header.Origin} != "http://" + {hostport}`
+		respond @crosssite "ChainForge only accepts requests from its own pages." 403
+
+		reverse_proxy 127.0.0.1:{$CF_INTERNAL_PORT} {
+			# ChainForge accepts only loopback names; the Origin was checked above.
+			header_up Host 127.0.0.1:{$CF_INTERNAL_PORT}
+			header_up -Origin
+			flush_interval -1
+		}
+	}
+}
